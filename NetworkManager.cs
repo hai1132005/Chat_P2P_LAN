@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -8,38 +7,35 @@ using System.Threading.Tasks;
 
 namespace LanP2PChat
 {
-    // Class lưu thông tin của một người dùng trong mạng
+    // Class lưu thông tin người dùng
     public class PeerInfo
     {
-        public string Name { get; set; }
-        public string IP { get; set; }
-        public int TcpPort { get; set; } // Cổng để chat riêng
-        public DateTime LastSeen { get; set; } // Để kiểm tra xem họ còn online không
+        public string Name { get; set; } = string.Empty;
+        public string IP { get; set; } = string.Empty;
+        public int TcpPort { get; set; }
+        public DateTime LastSeen { get; set; }
     }
 
     public class NetworkManager
     {
-        // Cấu hình
-        private const int UDP_PORT = 15000; // Cổng chung để "hú" nhau
-        private int myTcpPort;              // Cổng chat riêng của mình
+        private const int UDP_PORT = 15000;
+        private int myTcpPort;
         private string myName;
 
-        // Socket
-        private UdpClient udpBroadcaster;
-        private UdpClient udpListener;
-        private TcpListener tcpListener;
+        private UdpClient? udpBroadcaster;
+        private UdpClient? udpListener;
+        private TcpListener? tcpListener;
 
-        // Sự kiện để báo cho Giao diện biết
-        public event Action<PeerInfo> OnPeerFound; // Khi tìm thấy bạn mới
-        public event Action<string, string> OnMessageReceived; // Khi có tin nhắn đến (User, Content)
+        // Sự kiện báo ra ngoài
+        public event Action<PeerInfo>? OnPeerFound;
+        public event Action<string, string>? OnMessageReceived;
 
-        // Trạng thái
         private bool isRunning = false;
 
         public NetworkManager(string name)
         {
             myName = name;
-            // Chọn một cổng TCP ngẫu nhiên còn trống cho mình
+            // Tìm cổng TCP trống ngẫu nhiên
             TcpListener l = new TcpListener(IPAddress.Any, 0);
             l.Start();
             myTcpPort = ((IPEndPoint)l.LocalEndpoint).Port;
@@ -50,32 +46,28 @@ namespace LanP2PChat
         {
             isRunning = true;
             
-            // 1. Bắt đầu lắng nghe TCP (Để nhận tin nhắn chat)
+            // 1. Luồng TCP Server (Nhận tin nhắn)
             Thread tcpThread = new Thread(RunTcpServer);
             tcpThread.IsBackground = true;
             tcpThread.Start();
 
-            // 2. Bắt đầu lắng nghe UDP (Để biết ai đang online)
+            // 2. Luồng UDP Receiver (Nghe tìm bạn)
             Thread udpReceiveThread = new Thread(RunUdpReceiver);
             udpReceiveThread.IsBackground = true;
             udpReceiveThread.Start();
 
-            // 3. Bắt đầu gửi UDP Broadcast (Để báo mình đang online)
+            // 3. Luồng UDP Broadcaster (Hét tìm bạn)
             Thread udpBroadcastThread = new Thread(RunUdpBroadcaster);
             udpBroadcastThread.IsBackground = true;
             udpBroadcastThread.Start();
         }
 
-        // --- PHẦN 1: QUẢNG BÁ BẢN THÂN (UDP SENDER) ---
         private void RunUdpBroadcaster()
         {
             udpBroadcaster = new UdpClient();
             udpBroadcaster.EnableBroadcast = true;
-            
-            // Địa chỉ Broadcast toàn mạng
             IPEndPoint broadcastEP = new IPEndPoint(IPAddress.Broadcast, UDP_PORT);
-
-            // Gói tin: "HELLO|Tên_Của_Tôi|Cổng_TCP_Của_Tôi"
+            
             string message = $"HELLO|{myName}|{myTcpPort}";
             byte[] data = Encoding.UTF8.GetBytes(message);
 
@@ -84,19 +76,17 @@ namespace LanP2PChat
                 try
                 {
                     udpBroadcaster.Send(data, data.Length, broadcastEP);
-                    Thread.Sleep(3000); // Cứ 3 giây "hú" lên 1 lần
+                    Thread.Sleep(3000); // 3 giây gửi 1 lần
                 }
                 catch { }
             }
         }
 
-        // --- PHẦN 2: LẮNG NGHE NGƯỜI KHÁC (UDP RECEIVER) ---
         private void RunUdpReceiver()
         {
             try
             {
                 udpListener = new UdpClient();
-                // Thủ thuật để nhiều máy cùng lắng nghe trên 1 cổng UDP (Reuse Address)
                 udpListener.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 udpListener.Client.Bind(new IPEndPoint(IPAddress.Any, UDP_PORT));
 
@@ -107,15 +97,12 @@ namespace LanP2PChat
                     byte[] data = udpListener.Receive(ref remoteEP);
                     string message = Encoding.UTF8.GetString(data);
                     
-                    // Lọc tin nhắn của chính mình (dựa trên Port TCP gửi kèm)
                     string[] parts = message.Split('|');
                     if (parts.Length == 3 && parts[0] == "HELLO")
                     {
                         string name = parts[1];
                         int port = int.Parse(parts[2]);
 
-                        // Nếu không phải là mình thì báo ra ngoài
-                        // (Ở đây lọc đơn giản bằng tên, thực tế nên dùng IP + Port)
                         if (name != myName) 
                         {
                             OnPeerFound?.Invoke(new PeerInfo
@@ -129,13 +116,9 @@ namespace LanP2PChat
                     }
                 }
             }
-            catch (Exception ex) 
-            { 
-                // Xử lý lỗi nếu cần
-            }
+            catch { }
         }
 
-        // --- PHẦN 3: NHẬN TIN NHẮN CHAT (TCP SERVER) ---
         private void RunTcpServer()
         {
             tcpListener = new TcpListener(IPAddress.Any, myTcpPort);
@@ -146,7 +129,6 @@ namespace LanP2PChat
                 try
                 {
                     TcpClient client = tcpListener.AcceptTcpClient();
-                    // Xử lý mỗi tin nhắn đến trong 1 task riêng để không chặn server
                     Task.Run(() => HandleIncomingChat(client));
                 }
                 catch { }
@@ -163,7 +145,6 @@ namespace LanP2PChat
                     int bytesRead = stream.Read(buffer, 0, buffer.Length);
                     string rawMsg = Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
-                    // Định dạng tin nhắn: "SENDER_NAME|CONTENT"
                     string[] parts = rawMsg.Split(new[] { '|' }, 2);
                     if (parts.Length == 2)
                     {
@@ -177,7 +158,7 @@ namespace LanP2PChat
             catch { }
         }
 
-        // --- PHẦN 4: GỬI TIN NHẮN (TCP CLIENT) ---
+        // --- PHẦN GỬI TIN NHẮN (ĐÃ SỬA LẠI SẠCH SẼ) ---
         public void SendMessage(string peerIP, int peerPort, string content)
         {
             try
@@ -198,36 +179,15 @@ namespace LanP2PChat
             {
                 throw new Exception("Không thể gửi tin nhắn: " + ex.Message);
             }
-
-            try
-            {
-                netManager.SendMessage(selectedPeer.IP, selectedPeer.TcpPort, msg);
-
-                // Lưu tin mình vừa gửi vào sổ luôn
-                string myLog = $"[{DateTime.Now:HH:mm}] Me: {msg}\r\n";
-                
-                if (!chatLogs.ContainsKey(selectedPeer.Name))
-                {
-                    chatLogs[selectedPeer.Name] = "";
-                }
-                chatLogs[selectedPeer.Name] += myLog;
-                // ---------------------
-
-                AppendMessage("Me", msg, Color.Blue);
-                txtMessage.Clear();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Lỗi: " + ex.Message);
-            }
+         
         }
 
         public void Stop()
         {
             isRunning = false;
-            udpBroadcaster?.Close();
-            udpListener?.Close();
-            tcpListener?.Stop();
+            try { udpBroadcaster?.Close(); } catch {}
+            try { udpListener?.Close(); } catch {}
+            try { tcpListener?.Stop(); } catch {}
         }
     }
 }
