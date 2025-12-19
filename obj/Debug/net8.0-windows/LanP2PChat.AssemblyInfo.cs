@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LanP2PChat")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8a8d7152324a98b6d0bef24b6b4d488aaa134602")]
 [assembly: System.Reflection.AssemblyProductAttribute("LanP2PChat")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LanP2PChat")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
